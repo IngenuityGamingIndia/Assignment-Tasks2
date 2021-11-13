@@ -1,88 +1,247 @@
-let canvas = document.getElementById("canvas");
-canvas.width = window.innerWidth - 60;
-canvas.height = window.innerHeight * 0.6;
-let context = canvas.getContext("2d");
-context.fillStyle = "white";
-context.fillRect(0, 0, canvas.width, canvas.height);
-let restore_array = [];
-let start_index = -1;
-let stroke_color = 'black';
-let stroke_width = "2";
-let is_drawing = false;
-
-function change_color(element) {
-  stroke_color = element.style.background;
-}
-
-function change_width(element) {
-  stroke_width = element.innerHTML
-}
-
-function start(event) {
-  is_drawing = true;
-  context.beginPath();
-  context.moveTo(getX(event), getY(event));
-  event.preventDefault();
-}
-
-function draw(event) {
-  if (is_drawing) {
-    context.lineTo(getX(event), getY(event));
-    context.strokeStyle = stroke_color;
-    context.lineWidth = stroke_width;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.stroke();
-  }
-  event.preventDefault();
-}
-
-function stop(event) {
-  if (is_drawing) {
-    context.stroke();
-    context.closePath();
-    is_drawing = false;
-  }
-  event.preventDefault();
-  restore_array.push(context.getImageData(0, 0, canvas.width, canvas.height));
-  start_index += 1;
-}
-
-function getX(event) {
-  if (event.pageX == undefined) {return event.targetTouches[0].pageX - canvas.offsetLeft}
-  else {return event.pageX - canvas.offsetLeft}
-  }
-
-
-function getY(event) {
-  if (event.pageY == undefined) {return event.targetTouches[0].pageY - canvas.offsetTop}
-  else {return event.pageY - canvas.offsetTop}
-}
-
-canvas.addEventListener("touchstart", start, false);
-canvas.addEventListener("touchmove", draw, false);
-canvas.addEventListener("touchend", stop, false);
-canvas.addEventListener("mousedown", start, false);
-canvas.addEventListener("mousemove", draw, false);
-canvas.addEventListener("mouseup", stop, false);
-canvas.addEventListener("mouseout", stop, false);
-
-function Restore() {
-  if (start_index <= 0) {
-    Clear()
-  } else {
-    start_index += -1;
-    restore_array.pop();
-    if ( event.type != 'mouseout' ) {
-      context.putImageData(restore_array[start_index], 0, 0);
+let canvas;
+let ctx;
+let savedImageData;
+let dragging = false;
+let strokeColor = 'black';
+let fillColor = 'black';
+let line_Width = 2;
+let polygonSides = 6;
+let currentTool = 'brush';
+let canvasWidth = 600;
+let canvasHeight = 600;
+ 
+let usingBrush = false;
+let brushXPoints = new Array();
+let brushYPoints = new Array();
+let brushDownPos = new Array();
+ 
+class ShapeBoundingBox{
+    constructor(left, top, width, height) {
+        this.left = left;
+        this.top = top;
+        this.width = width;
+        this.height = height;
     }
-  }
 }
 
-function Clear() {
-    context.fillStyle = "white";
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    restore_array = [];
-    start_index = -1;
+class MouseDownPos{
+    constructor(x,y) {
+        this.x = x,
+        this.y = y;
+    }
 }
+
+class Location{
+    constructor(x,y) {
+        this.x = x,
+        this.y = y;
+    }
+}
+class PolygonPoint{
+    constructor(x,y) {
+        this.x = x,
+        this.y = y;
+    }
+}
+let shapeBoundingBox = new ShapeBoundingBox(0,0,0,0);
+let mousedown = new MouseDownPos(0,0);
+let loc = new Location(0,0);
+
+document.addEventListener('DOMContentLoaded', setupCanvas);
+ 
+function setupCanvas(){
+    canvas = document.getElementById('my-canvas');
+    ctx = canvas.getContext('2d');
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = line_Width;
+    canvas.addEventListener("mousedown", ReactToMouseDown);
+    canvas.addEventListener("mousemove", ReactToMouseMove);
+    canvas.addEventListener("mouseup", ReactToMouseUp);
+}
+ 
+function ChangeTool(toolClicked){
+    document.getElementById("save").className = "";
+    document.getElementById("brush").className = "";
+    document.getElementById("line").className = "";
+    document.getElementById("rectangle").className = "";
+    document.getElementById("circle").className = "";
+    document.getElementById("ellipse").className = "";
+    document.getElementById("polygon").className = "";
+    document.getElementById(toolClicked).className = "selected";
+    currentTool = toolClicked;
+}
+function GetMousePosition(x,y){
+    let canvasSizeData = canvas.getBoundingClientRect();
+    return { x: (x - canvasSizeData.left) * (canvas.width  / canvasSizeData.width),
+        y: (y - canvasSizeData.top)  * (canvas.height / canvasSizeData.height)
+      };
+}
+ 
+function SaveCanvasImage(){
+    savedImageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+}
+ 
+function RedrawCanvasImage(){
+    ctx.putImageData(savedImageData,0,0);
+}
+ 
+function UpdateRubberbandSizeData(loc){
+    shapeBoundingBox.width = Math.abs(loc.x - mousedown.x);
+    shapeBoundingBox.height = Math.abs(loc.y - mousedown.y);
+
+    if(loc.x > mousedown.x){
+        shapeBoundingBox.left = mousedown.x;
+    } else {
+        shapeBoundingBox.left = loc.x;
+    }
+    if(loc.y > mousedown.y){
+        shapeBoundingBox.top = mousedown.y;
+    } else {
+        shapeBoundingBox.top = loc.y;
+    }
+}
+
+function getAngleUsingXAndY(mouselocX, mouselocY){
+    let adjacent = mousedown.x - mouselocX;
+    let opposite = mousedown.y - mouselocY;
+ 
+    return radiansToDegrees(Math.atan2(opposite, adjacent));
+}
+ 
+function radiansToDegrees(rad){
+    if(rad < 0){
+        return (360.0 + (rad * (180 / Math.PI))).toFixed(2);
+    } else {
+        return (rad * (180 / Math.PI)).toFixed(2);
+    }
+}
+ 
+function degreesToRadians(degrees){
+    return degrees * (Math.PI / 180);
+}
+ 
+function getPolygonPoints(){
+    let angle =  degreesToRadians(getAngleUsingXAndY(loc.x, loc.y));
+    let radiusX = shapeBoundingBox.width;
+    let radiusY = shapeBoundingBox.height;
+    let polygonPoints = [];
+
+    for(let i = 0; i < polygonSides; i++){
+        polygonPoints.push(new PolygonPoint(loc.x + radiusX * Math.sin(angle),
+        loc.y - radiusY * Math.cos(angle)));
+        angle += 2 * Math.PI / polygonSides;
+    }
+    return polygonPoints;
+}
+ 
+function getPolygon(){
+    let polygonPoints = getPolygonPoints();
+    ctx.beginPath();
+    ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+    for(let i = 1; i < polygonSides; i++){
+        ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+    }
+    ctx.closePath();
+}
+ 
+function drawRubberbandShape(loc){
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = fillColor;
+    if(currentTool === "brush"){
+        DrawBrush();
+    } else if(currentTool === "line"){
+        ctx.beginPath();
+        ctx.moveTo(mousedown.x, mousedown.y);
+        ctx.lineTo(loc.x, loc.y);
+        ctx.stroke();
+    } else if(currentTool === "rectangle"){
+        ctx.strokeRect(shapeBoundingBox.left, shapeBoundingBox.top, shapeBoundingBox.width, shapeBoundingBox.height);
+    } else if(currentTool === "circle"){
+        let radius = shapeBoundingBox.width;
+        ctx.beginPath();
+        ctx.arc(mousedown.x, mousedown.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+    } else if(currentTool === "ellipse"){
+        let radiusX = shapeBoundingBox.width / 2;
+        let radiusY = shapeBoundingBox.height / 2;
+        ctx.beginPath();
+        ctx.ellipse(mousedown.x, mousedown.y, radiusX, radiusY, Math.PI / 4, 0, Math.PI * 2);
+        ctx.stroke();
+    } else if(currentTool === "polygon"){
+        getPolygon();
+        ctx.stroke();
+    }
+}
+ 
+function UpdateRubberbandOnMove(loc){
+    UpdateRubberbandSizeData(loc);
+    drawRubberbandShape(loc);
+}
+
+function AddBrushPoint(x, y, mouseDown){
+    brushXPoints.push(x);
+    brushYPoints.push(y);
+    brushDownPos.push(mouseDown);
+}
+ 
+function DrawBrush(){
+    for(let i = 1; i < brushXPoints.length; i++){
+        ctx.beginPath();
+        if(brushDownPos[i]){
+            ctx.moveTo(brushXPoints[i-1], brushYPoints[i-1]);
+        } else {
+            ctx.moveTo(brushXPoints[i]-1, brushYPoints[i]);
+        }
+        ctx.lineTo(brushXPoints[i], brushYPoints[i]);
+        ctx.closePath();
+        ctx.stroke();
+    }
+}
+ 
+function ReactToMouseDown(e){
+    canvas.style.cursor = "crosshair";
+    loc = GetMousePosition(e.clientX, e.clientY);
+    SaveCanvasImage();
+    mousedown.x = loc.x;
+    mousedown.y = loc.y;
+    dragging = true;
+    if(currentTool === 'brush'){
+        usingBrush = true;
+        AddBrushPoint(loc.x, loc.y);
+    }
+};
+ 
+function ReactToMouseMove(e){
+    canvas.style.cursor = "crosshair";
+    loc = GetMousePosition(e.clientX, e.clientY);
+    if(currentTool === 'brush' && dragging && usingBrush){
+        if(loc.x > 0 && loc.x < canvasWidth && loc.y > 0 && loc.y < canvasHeight){
+            AddBrushPoint(loc.x, loc.y, true);
+        }
+        RedrawCanvasImage();
+        DrawBrush();
+    } else {
+        if(dragging){
+            RedrawCanvasImage();
+            UpdateRubberbandOnMove(loc);
+        }
+    }
+};
+ 
+function ReactToMouseUp(e){
+    canvas.style.cursor = "default";
+    loc = GetMousePosition(e.clientX, e.clientY);
+    RedrawCanvasImage();
+    UpdateRubberbandOnMove(loc);
+    dragging = false;
+    usingBrush = false;
+}
+ 
+function SaveImage(){
+    var imageFile = document.getElementById("img-file");
+    imageFile.setAttribute('download', 'image.png');
+    imageFile.setAttribute('href', canvas.toDataURL());
+}
+ 
+
+ 
