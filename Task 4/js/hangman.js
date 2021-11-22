@@ -1,4 +1,4 @@
-var programming_languages = [
+var laptops = [
 
   "hp",
   "dell",
@@ -14,7 +14,7 @@ let guessed = [];
 let wordStatus = null;
 
 function randomWord() {
-  answer = programming_languages[Math.floor(Math.random() * programming_languages.length)];
+  answer = laptops[Math.floor(Math.random() * laptops.length)];
 }
 
 function generateButtons() {
