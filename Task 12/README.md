@@ -29,4 +29,4 @@ $ npm run build
 
 # License
 
-Aman Kushwaha Pvt. Lmd
+Aman Kushwaha
